@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ContextBox</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1>ContextBox</h1>
+      <div class="status-indicator" id="aibridge-status">
+        <span class="status-dot"></span>
+        <span class="status-text">Checking...</span>
+      </div>
+    </header>
+
+    <section class="selection-section">
+      <button id="toggle-selection" class="btn btn-primary">
+        Start Selection
+      </button>
+    </section>
+
+    <section class="settings-section">
+      <h3>Include in context:</h3>
+      <label class="checkbox-label">
+        <input type="checkbox" id="include-html" checked>
+        <span>HTML snippets</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="include-styles" checked>
+        <span>Computed styles</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="include-accessibility" checked>
+        <span>Accessibility info</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="include-screenshot" checked>
+        <span>Screenshot</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="persist-selection" checked>
+        <span>Persist on reload</span>
+      </label>
+    </section>
+
+    <section class="settings-section">
+      <h3>AiBridge</h3>
+      <input type="text" id="aibridge-url" class="text-input" value="http://127.0.0.1:9999" placeholder="http://127.0.0.1:9999">
+    </section>
+
+    <footer class="footer">
+      <p class="hint" id="hint-text"></p>
+    </footer>
+  </div>
+  <script src="popup.js" type="module"></script>
+</body>
+</html>
