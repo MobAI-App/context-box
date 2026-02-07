@@ -1,6 +1,6 @@
 {
   "name": "context-box",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Chrome extension that captures UI context from webpages and sends it to AI coding tools via AiBridge",
   "author": "MobAI <contact@mobai.run>",
   "license": "MIT",

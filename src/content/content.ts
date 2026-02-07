@@ -2,7 +2,7 @@ import type { Settings } from '../types';
 import type { SelectionGroup, SelectionState } from './types';
 import { createOverlayContainer, destroyOverlayContainer, getOverlayShadow, renderOverlays } from './overlay';
 import { createSelectedItem } from './extractor';
-import { createPopup } from './popup';
+import { createPopup, destroyPopup } from './popup';
 
 const STORAGE_KEY = 'contextbox_selection';
 
@@ -15,6 +15,7 @@ let state: SelectionState = 'INACTIVE';
 let groups: SelectionGroup[] = [];
 let nextGroupId = 1;
 let hoveredElement: Element | null = null;
+let scrollRafId = 0;
 
 const MAX_GROUPS = 20;
 
@@ -69,10 +70,11 @@ async function restoreSelection() {
     document.addEventListener('mouseout', handleMouseOut, true);
     document.addEventListener('click', handleClick, true);
     document.addEventListener('keydown', handleKeyDown, true);
+    window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
     document.body.style.cursor = 'crosshair';
 
     for (const pg of persisted) {
-      const group: SelectionGroup = { id: pg.id, elements: new Map(), popupEl: null };
+      const group: SelectionGroup = { id: pg.id, elements: new Map(), popupEl: null, attachmentPath: null };
 
       for (const selector of pg.selectors) {
         try {
@@ -128,6 +130,7 @@ function startSelection() {
   document.addEventListener('mouseout', handleMouseOut, true);
   document.addEventListener('click', handleClick, true);
   document.addEventListener('keydown', handleKeyDown, true);
+  window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
   document.body.style.cursor = 'crosshair';
 }
 
@@ -137,12 +140,13 @@ function stopSelection() {
   document.removeEventListener('mouseout', handleMouseOut, true);
   document.removeEventListener('click', handleClick, true);
   document.removeEventListener('keydown', handleKeyDown, true);
+  window.removeEventListener('scroll', handleScroll, true);
   document.body.style.cursor = '';
   hoveredElement = null;
 }
 
 function clearSelection() {
-  groups.forEach((g) => g.popupEl?.remove());
+  groups.forEach((g) => destroyPopup(g.popupEl));
   groups = [];
   nextGroupId = 1;
   hoveredElement = null;
@@ -154,7 +158,7 @@ function clearSelection() {
 function removeGroup(groupId: number) {
   const idx = groups.findIndex((g) => g.id === groupId);
   if (idx !== -1) {
-    groups[idx].popupEl?.remove();
+    destroyPopup(groups[idx].popupEl);
     groups.splice(idx, 1);
   }
   groups.forEach((g, i) => {
@@ -213,7 +217,7 @@ function handleClick(event: MouseEvent) {
         return;
       }
     } else if (groups.length < MAX_GROUPS) {
-      const group: SelectionGroup = { id: nextGroupId++, elements: new Map(), popupEl: null };
+      const group: SelectionGroup = { id: nextGroupId++, elements: new Map(), popupEl: null, attachmentPath: null };
       const item = createSelectedItem(el, group.id);
       group.elements.set(el, item);
       group.popupEl = createPopup(group, removeGroup);
@@ -224,6 +228,14 @@ function handleClick(event: MouseEvent) {
 
   render();
   saveSelection();
+}
+
+function handleScroll() {
+  if (scrollRafId) return;
+  scrollRafId = requestAnimationFrame(() => {
+    scrollRafId = 0;
+    if (state !== 'INACTIVE') render();
+  });
 }
 
 function handleKeyDown(event: KeyboardEvent) {

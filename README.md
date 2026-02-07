@@ -85,6 +85,10 @@ npm run build      # Build extension
 npm run watch      # Watch mode
 ```
 
+## Mobile Devices
+
+For a similar experience on mobile devices, check out [MobAI](https://mobai.run).
+
 ## Privacy
 
 ContextBox:

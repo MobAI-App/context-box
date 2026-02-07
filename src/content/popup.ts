@@ -6,6 +6,7 @@ import { annotateScreenshot } from './screenshot';
 const DEFAULT_AIBRIDGE_URL = 'http://127.0.0.1:9999';
 
 // SVG icons as constants (safe, not user input)
+const ATTACH_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>`;
 const COPY_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
   <path d="M8 4v12a2 2 0 002 2h8a2 2 0 002-2V7.242a2 2 0 00-.602-1.43L16.083 2.57A2 2 0 0014.685 2H10a2 2 0 00-2 2z"/>
   <path d="M16 18v2a2 2 0 01-2 2H6a2 2 0 01-2-2V9a2 2 0 012-2h2"/>
@@ -13,6 +14,13 @@ const COPY_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 const SEND_ICON = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>`;
 const CLOSE_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12"/></svg>`;
 const SPINNER_HTML = '<div class="cb-spinner"></div>';
+
+export function destroyPopup(popup: HTMLDivElement | null) {
+  if (!popup) return;
+  const interval = (popup as any)._cbStatusInterval;
+  if (interval) clearInterval(interval);
+  popup.remove();
+}
 
 export async function checkAiBridgeStatus(): Promise<boolean> {
   const result = await chrome.storage.local.get(['settings']);
@@ -35,35 +43,57 @@ export function createPopup(
   popup.className = 'cb-popup';
   popup.dataset.groupId = String(group.id);
 
+  const textarea = document.createElement('textarea');
+  textarea.rows = 1;
+  textarea.className = 'cb-popup-input';
+  textarea.placeholder = 'Shift+Enter for new line';
+
+  const actionsRow = document.createElement('div');
+  actionsRow.className = 'cb-popup-actions';
+
   const label = document.createElement('span');
   label.className = 'cb-popup-label';
   label.textContent = String(group.id);
 
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.className = 'cb-popup-input';
-  input.placeholder = 'Instructions...';
+  const attachBtn = document.createElement('button');
+  attachBtn.className = 'cb-popup-btn';
+  attachBtn.title = 'Attach file';
+  attachBtn.innerHTML = ATTACH_ICON;
+
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = 'image/*';
+  fileInput.style.display = 'none';
 
   const copyBtn = document.createElement('button');
   copyBtn.className = 'cb-popup-btn';
   copyBtn.title = 'Copy to clipboard';
-  copyBtn.innerHTML = COPY_ICON; // Safe: hardcoded SVG
+  copyBtn.innerHTML = COPY_ICON;
 
   const sendBtn = document.createElement('button');
   sendBtn.className = 'cb-popup-btn primary';
   sendBtn.title = 'Send to AiBridge';
-  sendBtn.innerHTML = SEND_ICON; // Safe: hardcoded SVG
+  sendBtn.innerHTML = SEND_ICON;
 
   const closeBtn = document.createElement('button');
   closeBtn.className = 'cb-popup-btn close';
   closeBtn.title = 'Remove selection';
-  closeBtn.innerHTML = CLOSE_ICON; // Safe: hardcoded SVG
+  closeBtn.innerHTML = CLOSE_ICON;
 
-  popup.appendChild(label);
-  popup.appendChild(input);
-  popup.appendChild(copyBtn);
-  popup.appendChild(sendBtn);
-  popup.appendChild(closeBtn);
+  const attachmentRow = document.createElement('div');
+  attachmentRow.className = 'cb-popup-attachment';
+  attachmentRow.style.display = 'none';
+
+  actionsRow.appendChild(label);
+  actionsRow.appendChild(attachBtn);
+  actionsRow.appendChild(copyBtn);
+  actionsRow.appendChild(sendBtn);
+  actionsRow.appendChild(closeBtn);
+
+  popup.appendChild(textarea);
+  popup.appendChild(attachmentRow);
+  popup.appendChild(actionsRow);
+  popup.appendChild(fileInput);
 
   let isConnected = false;
 
@@ -74,14 +104,79 @@ export function createPopup(
   };
   updateConnectionStatus();
 
+  const statusInterval = setInterval(updateConnectionStatus, 2000);
+  (popup as any)._cbStatusInterval = statusInterval;
+
+  function updateAttachmentRow() {
+    if (group.attachmentPath) {
+      const filename = group.attachmentPath.split(/[/\\]/).pop() || group.attachmentPath;
+      attachmentRow.innerHTML = ''; // Safe: rebuilding with DOM methods below
+      const icon = document.createElement('span');
+      icon.innerHTML = ATTACH_ICON; // Safe: hardcoded SVG constant
+      const nameSpan = document.createElement('span');
+      nameSpan.textContent = filename;
+      const removeBtn = document.createElement('button');
+      removeBtn.textContent = '\u00d7';
+      removeBtn.title = 'Remove attachment';
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        group.attachmentPath = null;
+        updateAttachmentRow();
+      });
+      attachmentRow.appendChild(icon);
+      attachmentRow.appendChild(nameSpan);
+      attachmentRow.appendChild(removeBtn);
+      attachmentRow.style.display = 'flex';
+    } else {
+      attachmentRow.style.display = 'none';
+      attachmentRow.innerHTML = '';
+    }
+  }
+
+  attachBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    fileInput.click();
+  });
+
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: 'SAVE_ATTACHMENT',
+          payload: { dataUrl, filename: file.name },
+        });
+        if (response?.error) {
+          console.error('ContextBox attachment error:', response.error);
+          return;
+        }
+        group.attachmentPath = response.path;
+        updateAttachmentRow();
+      } catch (err) {
+        console.error('ContextBox attachment error:', err);
+      }
+    };
+    reader.readAsDataURL(file);
+    fileInput.value = '';
+  });
+
+  textarea.addEventListener('input', () => {
+    textarea.style.height = 'auto';
+    textarea.style.height = textarea.scrollHeight + 'px';
+  });
+
   copyBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    handleAction(group, input.value, 'copy', popup, input, copyBtn);
+    handleAction(group, textarea.value, 'copy', popup, textarea, copyBtn);
   });
 
   sendBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    if (isConnected) handleAction(group, input.value, 'send', popup, input, sendBtn);
+    if (isConnected) handleAction(group, textarea.value, 'send', popup, textarea, sendBtn);
   });
 
   closeBtn.addEventListener('click', (e) => {
@@ -89,14 +184,14 @@ export function createPopup(
     onRemove(group.id);
   });
 
-  input.addEventListener('keydown', (e) => {
+  textarea.addEventListener('keydown', (e) => {
     e.stopPropagation();
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (isConnected) {
-        handleAction(group, input.value, 'send', popup, input, sendBtn);
+        handleAction(group, textarea.value, 'send', popup, textarea, sendBtn);
       } else {
-        handleAction(group, input.value, 'copy', popup, input, copyBtn);
+        handleAction(group, textarea.value, 'copy', popup, textarea, copyBtn);
       }
     }
   });
@@ -112,7 +207,7 @@ async function handleAction(
   instructions: string,
   action: 'copy' | 'send',
   popupEl: HTMLDivElement,
-  inputEl: HTMLInputElement,
+  inputEl: HTMLTextAreaElement,
   btnEl: HTMLButtonElement
 ) {
   const result = await chrome.storage.local.get(['settings']);
@@ -173,7 +268,7 @@ async function handleAction(
 
     const response = await chrome.runtime.sendMessage({
       type: 'SAVE_SCREENSHOT',
-      payload: { data, instructions, screenshotDataUrl },
+      payload: { data, instructions, screenshotDataUrl, attachmentPath: group.attachmentPath },
     });
 
     if (response?.error) throw new Error(response.error);

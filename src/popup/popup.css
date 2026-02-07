@@ -58,6 +58,13 @@ body {
 .selection-section {
   display: flex;
   flex-direction: column;
+  gap: 4px;
+}
+
+.hotkey-hint {
+  font-size: 11px;
+  color: #999;
+  text-align: center;
 }
 
 .settings-section {

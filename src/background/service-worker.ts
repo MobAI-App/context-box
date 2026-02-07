@@ -1,8 +1,33 @@
 import type { ExtractedData } from '../types';
 
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command !== 'toggle-selection') return;
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab?.id) return;
+  try {
+    const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_SELECTION_STATE' });
+    if (response?.isActive) {
+      await chrome.tabs.sendMessage(tab.id, { type: 'STOP_SELECTION' });
+    } else {
+      await chrome.tabs.sendMessage(tab.id, { type: 'START_SELECTION' });
+    }
+  } catch {
+    // Content script not loaded — inject and start
+    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content/content.js'] });
+    await chrome.tabs.sendMessage(tab.id, { type: 'START_SELECTION' });
+  }
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'SAVE_SCREENSHOT') {
     handleSaveScreenshot(message.payload)
+      .then(sendResponse)
+      .catch((error) => sendResponse({ error: error.message }));
+    return true;
+  }
+
+  if (message.type === 'SAVE_ATTACHMENT') {
+    handleSaveAttachment(message.payload)
       .then(sendResponse)
       .catch((error) => sendResponse({ error: error.message }));
     return true;
@@ -21,10 +46,11 @@ interface SavePayload {
   data: ExtractedData;
   instructions: string;
   screenshotDataUrl: string;
+  attachmentPath?: string | null;
 }
 
 async function handleSaveScreenshot(payload: SavePayload): Promise<{ prompt: string; screenshotPath: string | null }> {
-  const { data, instructions, screenshotDataUrl } = payload;
+  const { data, instructions, screenshotDataUrl, attachmentPath } = payload;
 
   let screenshotPath: string | null = null;
 
@@ -36,11 +62,11 @@ async function handleSaveScreenshot(payload: SavePayload): Promise<{ prompt: str
     console.warn('Screenshot save failed:', error);
   }
 
-  const prompt = buildPrompt(data, instructions, screenshotPath);
+  const prompt = buildPrompt(data, instructions, screenshotPath, attachmentPath ?? null);
   return { prompt, screenshotPath };
 }
 
-function buildPrompt(data: ExtractedData, instructions: string, screenshotPath: string | null): string {
+function buildPrompt(data: ExtractedData, instructions: string, screenshotPath: string | null, attachmentPath: string | null): string {
   const { pageContext, items } = data;
 
   let prompt = '';
@@ -102,9 +128,46 @@ function buildPrompt(data: ExtractedData, instructions: string, screenshotPath: 
     prompt += `(Bounding boxes labeled by element index)\n\n`;
   }
 
+  if (attachmentPath) {
+    prompt += `Design reference: ${attachmentPath}\n\n`;
+  }
+
   prompt += `Task: Use the data above. Refer to elements by index.\n`;
 
   return prompt;
+}
+
+async function handleSaveAttachment(payload: { dataUrl: string; filename: string }): Promise<{ path: string }> {
+  const { dataUrl, filename } = payload;
+  const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const dlFilename = `contextbox/ref_${safeName}`;
+
+  const path = await new Promise<string>((resolve, reject) => {
+    chrome.downloads.download({ url: dataUrl, filename: dlFilename, saveAs: false }, (downloadId) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+
+      const listener = (delta: chrome.downloads.DownloadDelta) => {
+        if (delta.id !== downloadId) return;
+
+        if (delta.state?.current === 'complete') {
+          chrome.downloads.onChanged.removeListener(listener);
+          chrome.downloads.search({ id: downloadId }, (results) => {
+            resolve(results[0].filename);
+          });
+        } else if (delta.state?.current === 'interrupted') {
+          chrome.downloads.onChanged.removeListener(listener);
+          reject(new Error('Download interrupted'));
+        }
+      };
+
+      chrome.downloads.onChanged.addListener(listener);
+    });
+  });
+
+  return { path };
 }
 
 async function saveScreenshot(dataUrl: string, pageUrl: string): Promise<string> {
