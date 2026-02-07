@@ -35,7 +35,6 @@ export function createOverlayContainer() {
       pointer-events: none;
       border: 1px dashed rgba(245, 158, 11, 0.6);
       background: none;
-      transition: all 0.1s ease;
     }
     .cb-selected {
       border: 2px solid #D97706;
@@ -56,16 +55,18 @@ export function createOverlayContainer() {
     .cb-popup {
       position: fixed;
       pointer-events: auto;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
       padding: 4px 6px;
+      width: 260px;
       background: #1a1a1a;
       border-radius: 6px;
       box-shadow: 0 4px 16px rgba(0,0,0,0.24);
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
       font-size: 12px;
       z-index: 1;
+      box-sizing: border-box;
     }
     .cb-popup-label {
       background: #D97706;
@@ -86,11 +87,26 @@ export function createOverlayContainer() {
       padding: 6px 10px;
       font-size: 12px;
       color: white;
-      width: 140px;
+      width: 100%;
       outline: none;
+      resize: none;
+      min-height: 28px;
+      max-height: 80px;
+      overflow-y: auto;
+      font-family: inherit;
+      line-height: 1.4;
+      box-sizing: border-box;
     }
     .cb-popup-input::placeholder { color: #666; }
     .cb-popup-input:focus { background: #333; }
+    .cb-popup-actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .cb-popup-actions .cb-popup-label {
+      margin-right: auto;
+    }
     .cb-popup-btn {
       width: 28px;
       height: 28px;
@@ -111,6 +127,40 @@ export function createOverlayContainer() {
     .cb-popup-btn.primary:hover:not(.disabled) { background: #F59E0B; }
     .cb-popup-btn.primary.disabled { opacity: 0.4; cursor: not-allowed; }
     .cb-popup-btn.close:hover { background: #7f1d1d; color: #fca5a5; }
+    .cb-popup-attachment {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 6px;
+      background: #2a2a2a;
+      border-radius: 4px;
+      font-size: 11px;
+      color: #ccc;
+      overflow: hidden;
+    }
+    .cb-popup-attachment svg {
+      width: 12px;
+      height: 12px;
+      flex-shrink: 0;
+      color: #888;
+    }
+    .cb-popup-attachment span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex: 1;
+    }
+    .cb-popup-attachment button {
+      background: none;
+      border: none;
+      color: #666;
+      cursor: pointer;
+      padding: 0;
+      font-size: 14px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .cb-popup-attachment button:hover { color: #f87171; }
     .cb-popup-overlay {
       position: absolute;
       top: 0;

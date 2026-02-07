@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ContextBox",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Capture UI context from webpages and send it to AI coding tools via AiBridge",
   "permissions": [
     "activeTab",
@@ -41,6 +41,15 @@
       "run_at": "document_idle"
     }
   ],
+  "commands": {
+    "toggle-selection": {
+      "suggested_key": {
+        "default": "Alt+Shift+S",
+        "mac": "Alt+Shift+S"
+      },
+      "description": "Toggle element selection mode"
+    }
+  },
   "web_accessible_resources": [
     {
       "resources": ["content/content.css"],
